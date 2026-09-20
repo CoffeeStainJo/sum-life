@@ -9,6 +9,7 @@ const THEME_COLOR = '#0f172a';
 // `npm run dev` serves plain HTTP (localhost counts as a secure context, so the camera works on the dev machine).
 // `npm run dev:https` adds a self-signed certificate so an iPhone on the same network can use the camera.
 export default defineConfig(({ mode }) => ({
+  base: '/sum-life/',
   plugins: [
     react(),
     ...(mode === 'https' ? [basicSsl()] : []),
@@ -20,8 +21,8 @@ export default defineConfig(({ mode }) => ({
         short_name: 'Sum Life',
         description: 'A minimal daily food journal. Scan, search, log.',
         lang: 'en',
-        start_url: '/',
-        scope: '/',
+        start_url: '/sum-life/',
+        scope: '/sum-life/',
         display: 'standalone',
         orientation: 'portrait',
         theme_color: THEME_COLOR,
