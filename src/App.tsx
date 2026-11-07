@@ -1,10 +1,11 @@
 import { Plus } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MealType } from './types';
 import { MEAL_TYPES } from './types';
 import { useDailyJournal } from './hooks/useDailyJournal';
 import { formatDateHeading } from './lib/dates';
 import { suggestMealType } from './lib/meals';
+import { fmtGrouped } from './lib/nutrition';
 import { AddFoodDrawer } from './components/AddFoodDrawer';
 import { CopyYesterdayButton } from './components/CopyYesterdayButton';
 import { MealSection } from './components/MealSection';
@@ -24,16 +25,36 @@ export default function App() {
   }, []);
   const closeDrawer = useCallback(() => setDrawer((d) => ({ ...d, open: false })), []);
 
+  // Once the big summary scrolls away, show a compact kcal count in the top bar.
+  const mainRef = useRef<HTMLElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
+  const [heroHidden, setHeroHidden] = useState(false);
+  useEffect(() => {
+    const root = mainRef.current;
+    const hero = heroRef.current;
+    if (!root || !hero || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => setHeroHidden(entry.intersectionRatio < 0.3), {
+      root,
+      threshold: 0.3,
+    });
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="app">
-      <header className="app__header">
-        <h1 className="app__title">Sum Life</h1>
-        <p className="app__date">{formatDateHeading(journal.date)}</p>
+      <header className={`topbar${heroHidden ? ' is-condensed' : ''}`}>
+        <h1 className="wordmark">
+          Sum <em>Life</em>
+        </h1>
+        <p className="topbar__kcal" aria-hidden={!heroHidden}>
+          {fmtGrouped(journal.totals.calories)} <small>kcal</small>
+        </p>
       </header>
 
-      <SummaryBar totals={journal.totals} />
+      <main ref={mainRef} className="app__main">
+        <SummaryBar ref={heroRef} totals={journal.totals} dateLabel={formatDateHeading(journal.date)} />
 
-      <main className="app__main">
         {journal.canCopyYesterday && (
           <CopyYesterdayButton
             entryCount={journal.yesterdayEntryCount}
@@ -54,8 +75,9 @@ export default function App() {
         ))}
       </main>
 
-      <button type="button" className="fab" aria-label="Add food" onClick={() => openDrawer()}>
-        <Plus size={28} />
+      <button type="button" className="fab" onClick={() => openDrawer()}>
+        <Plus size={22} strokeWidth={2.5} aria-hidden="true" />
+        <span>Add food</span>
       </button>
 
       <AddFoodDrawer open={drawer.open} initialMeal={drawer.meal} onClose={closeDrawer} onAdd={journal.addEntry} />

@@ -340,9 +340,13 @@ export function FoodConfirmForm({ candidate, defaultMeal, onSubmit }: Props) {
 
       <div className="confirm__footer">
         <div className="confirm__preview">
-          <strong>{fmt(preview.calories)} kcal</strong>
-          <span>
-            P {fmt(preview.protein)} · C {fmt(preview.carbs)} · F {fmt(preview.fat)}
+          <strong>
+            {fmt(preview.calories)} <small>kcal</small>
+          </strong>
+          <span className="confirm__macros">
+            <span className="macro-chip macro-chip--protein">P {fmt(preview.protein)}</span>
+            <span className="macro-chip macro-chip--carbs">C {fmt(preview.carbs)}</span>
+            <span className="macro-chip macro-chip--fat">F {fmt(preview.fat)}</span>
           </span>
         </div>
         <button type="submit" className="btn btn--primary btn--lg" disabled={!nameValid || !macrosValid}>

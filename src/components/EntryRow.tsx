@@ -28,10 +28,13 @@ export function EntryRow({ entry, onChangeServings, onRemove }: Props) {
         </span>
       </div>
       <div className="entry__controls">
-        <span className="entry__macros" aria-label="Macros">
-          <b className="c-protein">P</b> {fmt(macros.protein)}
-          <b className="c-carbs">C</b> {fmt(macros.carbs)}
-          <b className="c-fat">F</b> {fmt(macros.fat)}
+        <span
+          className="entry__macros"
+          aria-label={`Protein ${fmt(macros.protein)} g, carbs ${fmt(macros.carbs)} g, fat ${fmt(macros.fat)} g`}
+        >
+          <span className="macro-chip macro-chip--protein">P {fmt(macros.protein)}</span>
+          <span className="macro-chip macro-chip--carbs">C {fmt(macros.carbs)}</span>
+          <span className="macro-chip macro-chip--fat">F {fmt(macros.fat)}</span>
         </span>
         <Stepper
           size="sm"

@@ -5,9 +5,11 @@ import {
   canLogByWeight,
   clampGrams,
   clampServings,
+  energySplit,
   entryAmount,
   entryMacros,
   fmt,
+  fmtGrouped,
   formatAmount,
   gramsFromServings,
   servingsForAmount,
@@ -111,5 +113,25 @@ describe('suggestMealType', () => {
     expect(suggestMealType(new Date(2026, 8, 18, 12, 30))).toBe('Lunch');
     expect(suggestMealType(new Date(2026, 8, 18, 19, 0))).toBe('Dinner');
     expect(suggestMealType(new Date(2026, 8, 18, 22, 15))).toBe('Snack');
+  });
+});
+
+describe('energySplit', () => {
+  it('weights fat at 9 kcal/g and protein/carbs at 4', () => {
+    const split = energySplit({ protein: 25, carbs: 25, fat: 100 / 9 });
+    expect(split.protein).toBeCloseTo(0.333, 3);
+    expect(split.carbs).toBeCloseTo(0.333, 3);
+    expect(split.fat).toBeCloseTo(0.333, 3);
+  });
+
+  it('is all zero when nothing is logged', () => {
+    expect(energySplit({ protein: 0, carbs: 0, fat: 0 })).toEqual({ protein: 0, carbs: 0, fat: 0 });
+  });
+});
+
+describe('fmtGrouped', () => {
+  it('groups thousands and rounds', () => {
+    expect(fmtGrouped(1842.4, 'en-GB')).toBe('1,842');
+    expect(fmtGrouped(0, 'en-GB')).toBe('0');
   });
 });

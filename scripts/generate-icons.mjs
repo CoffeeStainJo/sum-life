@@ -1,5 +1,5 @@
 // Generates the PWA icons in public/icons without any image dependencies.
-// Draws a slate background with an emerald ring + dot (a "plate"), encodes it as PNG
+// Draws a tomato background with a cream ring + wheat dot (a "plate"), encodes it as PNG
 // using Node's zlib, and also writes an SVG favicon with the same geometry.
 //
 //   node scripts/generate-icons.mjs
@@ -11,9 +11,9 @@ import { fileURLToPath } from 'node:url';
 
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'icons');
 
-const BG = [15, 23, 42]; // #0f172a
-const RING = [52, 211, 153]; // #34d399
-const DOT = [16, 185, 129]; // #10b981
+const BG = [196, 71, 43]; // #c4472b tomato
+const RING = [245, 239, 228]; // #f5efe4 paper
+const DOT = [233, 180, 76]; // #e9b44c wheat
 
 // Geometry as fractions of the icon size.
 const RING_OUTER = 0.36;

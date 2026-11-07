@@ -1,7 +1,7 @@
 import { Coffee, Cookie, Moon, Plus, Sun, type LucideIcon } from 'lucide-react';
 import type { JournalEntry, MealType } from '../types';
 import { MEAL_LABELS } from '../lib/meals';
-import { fmt, sumMacros } from '../lib/nutrition';
+import { fmtGrouped, sumMacros } from '../lib/nutrition';
 import { EntryRow } from './EntryRow';
 
 const ICONS: Record<MealType, LucideIcon> = {
@@ -25,7 +25,7 @@ export function MealSection({ meal, entries, onAdd, onChangeServings, onRemove }
   const totals = sumMacros(entries);
 
   return (
-    <section className="meal" aria-labelledby={`meal-${meal}`}>
+    <section className={`meal meal--${meal.toLowerCase()}`} aria-labelledby={`meal-${meal}`}>
       <header className="meal__header">
         <span className="meal__icon" aria-hidden="true">
           <Icon size={18} />
@@ -33,7 +33,11 @@ export function MealSection({ meal, entries, onAdd, onChangeServings, onRemove }
         <h2 id={`meal-${meal}`} className="meal__title">
           {label}
         </h2>
-        <span className="meal__kcal">{entries.length > 0 ? `${fmt(totals.calories)} kcal` : ''}</span>
+        {entries.length > 0 && (
+          <span className="meal__kcal">
+            {fmtGrouped(totals.calories)} <small>kcal</small>
+          </span>
+        )}
         <button
           type="button"
           className="icon-btn icon-btn--accent"
@@ -50,7 +54,9 @@ export function MealSection({ meal, entries, onAdd, onChangeServings, onRemove }
           ))}
         </ul>
       ) : (
-        <p className="meal__empty">Nothing logged yet.</p>
+        <button type="button" className="meal__empty" onClick={() => onAdd(meal)}>
+          <Plus size={16} aria-hidden="true" /> Add {label.toLowerCase()}
+        </button>
       )}
     </section>
   );

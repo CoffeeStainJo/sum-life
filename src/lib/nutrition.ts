@@ -101,3 +101,27 @@ export function formatAmount(value: number, decimals = 2): string {
   const factor = 10 ** decimals;
   return String(Math.round(value * factor) / factor);
 }
+
+/** kcal per gram, used to show where a day's energy comes from. */
+const KCAL_PER_GRAM = { protein: 4, carbs: 4, fat: 9 } as const;
+
+export interface EnergySplit {
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+/** Share of energy (0–1) from protein, carbs and fat. All zero when nothing is logged. */
+export function energySplit(totals: Pick<MacroTotals, 'protein' | 'carbs' | 'fat'>): EnergySplit {
+  const protein = Math.max(0, totals.protein) * KCAL_PER_GRAM.protein;
+  const carbs = Math.max(0, totals.carbs) * KCAL_PER_GRAM.carbs;
+  const fat = Math.max(0, totals.fat) * KCAL_PER_GRAM.fat;
+  const sum = protein + carbs + fat;
+  if (sum <= 0) return { protein: 0, carbs: 0, fat: 0 };
+  return { protein: protein / sum, carbs: carbs / sum, fat: fat / sum };
+}
+
+/** Whole number with locale grouping, e.g. 1842 → "1,842" (or "1 842"). */
+export function fmtGrouped(n: number, locale?: string): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(n));
+}

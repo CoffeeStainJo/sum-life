@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { VitePWA } from 'vite-plugin-pwa';
 
-const THEME_COLOR = '#0f172a';
+const THEME_COLOR = '#f5efe4';
 
 // `npm run dev` serves plain HTTP (localhost counts as a secure context, so the camera works on the dev machine).
 // `npm run dev:https` adds a self-signed certificate so an iPhone on the same network can use the camera.
@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
         navigateFallback: '/index.html',
         cleanupOutdatedCaches: true,
         runtimeCaching: [

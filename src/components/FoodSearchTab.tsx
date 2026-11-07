@@ -61,10 +61,13 @@ export function FoodSearchTab({ search, onPick, onManual }: Props) {
             return (
               <li key={`${candidate.barcode ?? candidate.name}-${index}`}>
                 <button type="button" className="result" onClick={() => onPick(candidate)}>
-                  <span className="result__name">{candidate.name}</span>
-                  <span className="result__meta">
-                    {candidate.brand ? `${candidate.brand} · ` : ''}
-                    {fmt(basis.macros.calories)} kcal per {basis.label}
+                  <span className="result__info">
+                    <span className="result__name">{candidate.name}</span>
+                    {candidate.brand && <span className="result__meta">{candidate.brand}</span>}
+                  </span>
+                  <span className="result__kcal">
+                    <strong>{fmt(basis.macros.calories)}</strong>
+                    <small>kcal / {basis.label}</small>
                   </span>
                 </button>
               </li>
