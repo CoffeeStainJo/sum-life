@@ -8,7 +8,8 @@ nutrition figures, and log it. Only today (and yesterday, for copying) is ever k
 
 - React 19 + TypeScript, built with Vite
 - Plain CSS (dark theme), icons from `lucide-react`
-- `@zxing/browser` for EAN/UPC scanning through the device camera
+- The browser's built-in `BarcodeDetector` for EAN/UPC scanning where available, with `@zxing/library`
+  in a Web Worker as the fallback
 - Open Food Facts REST API (no key needed)
 - `vite-plugin-pwa` (Workbox) for the manifest and service worker
 
@@ -33,7 +34,7 @@ work from the phone.
 2. Open that URL in Safari on the phone. Accept the self-signed certificate warning
    (*Show Details* → *visit this website*).
 3. Tap *Share* → *Add to Home Screen* to run it as a standalone app. Camera permission is asked the
-   first time you tap *Start camera*. If you deny it, the scanner shows a manual barcode field and
+   first time you open the *Scan* tab. If you deny it, the scanner shows a manual barcode field and
    you can re-enable the camera under *Settings → Safari → Camera*.
 
 The production build (`npm run build` → `dist/`) is fully static. Host it on any HTTPS static host
@@ -50,6 +51,9 @@ src/
     openFoodFacts.ts        Barcode + text search, nutriment parsing (per 100 g and per serving)
     nutrition.ts            Serving maths, totals, clamping
     feedback.ts             Beep (WebAudio) + vibrate on scan
+    scanning.ts             Reticle → video crop geometry, read confirmation
+    barcodeDecoder.ts       Native BarcodeDetector, or zxing in a Web Worker
+    zxingDecode.ts          zxing decode of RGBA pixels (runs in workers/barcode.worker.ts)
     meals.ts, errors.ts, id.ts
   hooks/
     useDailyJournal.ts      Loads today + yesterday, persists edits, handles midnight rollover
@@ -61,7 +65,7 @@ src/
     CopyYesterdayButton.tsx Shown only when today is empty and yesterday is not
     AddFoodDrawer.tsx       Bottom sheet with Search and Scan tabs
     FoodSearchTab.tsx       Search results + "enter manually"
-    BarcodeScanner.tsx      Camera (playsinline/muted, rear lens), permission fallbacks, manual entry
+    BarcodeScanner.tsx      Camera (auto-starts, freezes on capture), permission fallbacks, manual entry
     FoodConfirmForm.tsx     Review/edit figures, pick basis, amount (grams or servings) and meal
 ```
 

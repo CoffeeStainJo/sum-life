@@ -1,15 +1,14 @@
 import { ChevronLeft, ScanBarcode, Search, X } from 'lucide-react';
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { AmountUnit, FoodItem, MealType } from '../types';
 import { useBarcodeLookup, type BarcodeLookup } from '../hooks/useBarcodeLookup';
 import { useFoodSearch } from '../hooks/useFoodSearch';
+import { primeAudio } from '../lib/feedback';
 import { emptyCandidate, type FoodCandidate } from '../lib/openFoodFacts';
+// Light on its own: the zxing decoder lives in a Web Worker that loads only when the camera starts.
+import { BarcodeScanner } from './BarcodeScanner';
 import { FoodConfirmForm } from './FoodConfirmForm';
 import { FoodSearchTab } from './FoodSearchTab';
-import { Spinner } from './Spinner';
-
-// The zxing decoder is ~600 kB; only load it when the Scan tab is opened.
-const BarcodeScanner = lazy(() => import('./BarcodeScanner').then((m) => ({ default: m.BarcodeScanner })));
 
 type Tab = 'search' | 'scan';
 
@@ -112,7 +111,11 @@ function DrawerContent({ initialMeal, onClose, onAdd }: Omit<Props, 'open'>) {
                 aria-selected={tab === 'scan'}
                 aria-controls="panel-scan"
                 className={`tabs__tab${tab === 'scan' ? ' is-active' : ''}`}
-                onClick={() => setTab('scan')}
+                onClick={() => {
+                  // The camera starts on its own, so unlock the success beep (iOS) with this tap.
+                  primeAudio();
+                  setTab('scan');
+                }}
               >
                 <ScanBarcode size={18} /> Scan
               </button>
@@ -134,11 +137,12 @@ function DrawerContent({ initialMeal, onClose, onAdd }: Omit<Props, 'open'>) {
 function ScanTab({ lookup, onManual }: { lookup: BarcodeLookup; onManual: () => void }) {
   return (
     <div className="scan-tab">
-      <Suspense fallback={<Spinner label="Loading scanner…" />}>
-        <BarcodeScanner onDetected={lookup.lookup} paused={lookup.status === 'loading'} />
-      </Suspense>
-
-      {lookup.status === 'loading' && <Spinner label={`Looking up ${lookup.barcode ?? ''}…`} />}
+      {/* Stays frozen on the captured frame until the lookup is reset ("Scan again"). */}
+      <BarcodeScanner
+        onDetected={lookup.lookup}
+        paused={lookup.status !== 'idle'}
+        statusText={lookup.status === 'loading' ? `Looking up ${lookup.barcode ?? ''}…` : null}
+      />
 
       {lookup.status === 'not-found' && (
         <div className="notice notice--warn" role="status">

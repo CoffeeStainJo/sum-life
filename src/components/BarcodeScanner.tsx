@@ -1,24 +1,24 @@
-import { BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser';
-import { BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { Camera, CircleOff, Keyboard, TriangleAlert } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { createFrameDecoder, type FrameDecoder } from '../lib/barcodeDecoder';
 import { primeAudio, scanSuccessFeedback } from '../lib/feedback';
 import { normalizeBarcode } from '../lib/openFoodFacts';
+import { RETICLE, createReadConfirmer, fitWithin, reticleToVideoRect } from '../lib/scanning';
 import { Spinner } from './Spinner';
 
-type ScannerStatus = 'idle' | 'starting' | 'scanning' | 'denied' | 'unavailable' | 'insecure' | 'error';
+type ScannerStatus = 'idle' | 'starting' | 'live' | 'denied' | 'unavailable' | 'insecure' | 'error';
 
 interface Props {
+  /** Called once per detected (or typed) barcode. The parent should set `paused` while it handles it. */
   onDetected: (barcode: string) => void;
-  /** While true the camera is released (e.g. during a product lookup). */
+  /**
+   * While true the last frame stays frozen on screen and decoding stops. The camera stays on,
+   * so scanning resumes instantly when this goes back to false.
+   */
   paused?: boolean;
+  /** Short status shown over the camera view, e.g. while a product is looked up. */
+  statusText?: string | null;
 }
-
-/** Only retail product symbologies: keeps decoding fast and avoids false positives from QR codes etc. */
-const HINTS = new Map<DecodeHintType, unknown>([
-  [DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E]],
-  [DecodeHintType.TRY_HARDER, true],
-]);
 
 /** Back camera preferred, but `ideal` lets laptops without one still work. */
 const CONSTRAINTS: MediaStreamConstraints = {
@@ -31,6 +31,17 @@ const CONSTRAINTS: MediaStreamConstraints = {
 };
 
 const MIN_BARCODE_DIGITS = 8;
+/** Longest side of the cropped frame handed to the decoder. Plenty for EAN/UPC, cheap to process. */
+const MAX_DECODE_SIDE = 800;
+/** Floor between decode attempts, so a fast decoder does not spin the CPU (and battery) flat out. */
+const MIN_FRAME_INTERVAL_MS = 60;
+
+const RETICLE_STYLE: CSSProperties = {
+  left: `${RETICLE.x * 100}%`,
+  top: `${RETICLE.y * 100}%`,
+  width: `${RETICLE.width * 100}%`,
+  height: `${RETICLE.height * 100}%`,
+};
 
 function describeError(err: unknown): { status: ScannerStatus; message: string } {
   const name = err instanceof Error ? err.name : '';
@@ -55,14 +66,37 @@ function describeError(err: unknown): { status: ScannerStatus; message: string }
   }
 }
 
-export function BarcodeScanner({ onDetected, paused = false }: Props) {
+/** Ask for continuous autofocus where the browser lets us (mostly Android); iOS already does this. */
+async function preferContinuousFocus(track: MediaStreamTrack | undefined): Promise<void> {
+  try {
+    const caps = track?.getCapabilities?.() as { focusMode?: string[] } | undefined;
+    if (track && caps?.focusMode?.includes('continuous')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet] });
+    }
+  } catch {
+    /* best-effort */
+  }
+}
+
+export function BarcodeScanner({ onDetected, paused = false, statusText = null }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const controlsRef = useRef<IScannerControls | null>(null);
-  /** Bumped on every start/stop so callbacks from a previous camera session are ignored. */
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const decoderRef = useRef<Promise<FrameDecoder> | null>(null);
+  const confirmerRef = useRef(createReadConfirmer());
+  /** Bumped whenever the camera starts or stops, so async work from an older camera session is ignored. */
   const sessionRef = useRef(0);
+  /** Bumped whenever the decode loop starts or stops, so at most one loop ever runs. */
+  const loopRef = useRef(0);
+  const timerRef = useRef<number | undefined>(undefined);
+  const pausedRef = useRef(paused);
+  /** Set the moment a code is accepted, before the parent has had a chance to pause us. */
+  const lockedRef = useRef(false);
   const onDetectedRef = useRef(onDetected);
 
   const [status, setStatus] = useState<ScannerStatus>('idle');
+  const [detected, setDetected] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
   const [manualCode, setManualCode] = useState('');
@@ -71,14 +105,82 @@ export function BarcodeScanner({ onDetected, paused = false }: Props) {
     onDetectedRef.current = onDetected;
   }, [onDetected]);
 
-  const stop = useCallback(() => {
-    sessionRef.current += 1;
-    controlsRef.current?.stop();
-    controlsRef.current = null;
+  const stopLoop = useCallback(() => {
+    loopRef.current += 1;
+    window.clearTimeout(timerRef.current);
   }, []);
 
+  /** Crop the reticle area out of the current video frame and decode it. */
+  const decodeFrame = useCallback(async (decoder: FrameDecoder): Promise<string | null> => {
+    const video = videoRef.current;
+    const viewport = viewportRef.current;
+    if (!video || !viewport || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) return null;
+
+    const src = reticleToVideoRect(video.videoWidth, video.videoHeight, viewport.clientWidth, viewport.clientHeight);
+    if (src.width < 2 || src.height < 2) return null;
+    const out = fitWithin(src.width, src.height, MAX_DECODE_SIDE);
+
+    const canvas = (canvasRef.current ??= document.createElement('canvas'));
+    if (canvas.width !== out.width) canvas.width = out.width;
+    if (canvas.height !== out.height) canvas.height = out.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(video, src.x, src.y, src.width, src.height, 0, 0, out.width, out.height);
+    return decoder.decode(canvas, ctx);
+  }, []);
+
+  const accept = useCallback(
+    (code: string) => {
+      lockedRef.current = true;
+      stopLoop();
+      // Freeze the frame that was read, so it is obvious what was captured.
+      videoRef.current?.pause();
+      scanSuccessFeedback();
+      setDetected(true);
+      onDetectedRef.current(code);
+    },
+    [stopLoop],
+  );
+
+  const startLoop = useCallback(async () => {
+    stopLoop();
+    const loop = loopRef.current;
+    const decoder = await decoderRef.current;
+    if (!decoder) return;
+    const stale = () => loop !== loopRef.current || lockedRef.current || pausedRef.current;
+
+    const tick = async () => {
+      if (stale()) return;
+      const startedAt = performance.now();
+      const raw = await decodeFrame(decoder);
+      if (stale()) return;
+
+      const code = raw ? normalizeBarcode(raw) : '';
+      if (code.length >= MIN_BARCODE_DIGITS) {
+        const confirmed = confirmerRef.current.push(code, performance.now(), decoder.confirmations);
+        if (confirmed) {
+          accept(confirmed);
+          return;
+        }
+      }
+      const elapsed = performance.now() - startedAt;
+      timerRef.current = window.setTimeout(() => void tick(), Math.max(0, MIN_FRAME_INTERVAL_MS - elapsed));
+    };
+    void tick();
+  }, [accept, decodeFrame, stopLoop]);
+
+  const stopCamera = useCallback(() => {
+    sessionRef.current += 1;
+    stopLoop();
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    lockedRef.current = false;
+    setDetected(false);
+  }, [stopLoop]);
+
   const start = useCallback(async () => {
-    // Must run inside the tap so iOS lets us create/resume the AudioContext for the beep.
+    // Inside a tap this unlocks audio for the success beep on iOS; elsewhere it is harmless.
     primeAudio();
 
     if (!window.isSecureContext) {
@@ -96,76 +198,116 @@ export function BarcodeScanner({ onDetected, paused = false }: Props) {
     const video = videoRef.current;
     if (!video) return;
 
-    stop();
+    stopCamera();
     const session = sessionRef.current;
     setStatus('starting');
     setMessage(null);
 
-    const reader = new BrowserMultiFormatReader(HINTS, {
-      delayBetweenScanAttempts: 150,
-      delayBetweenScanSuccess: 1500,
-    });
+    // Load the decoder while the camera warms up, and keep it for later camera sessions.
+    decoderRef.current ??= createFrameDecoder();
 
     try {
-      const controls = await reader.decodeFromConstraints(CONSTRAINTS, video, (result, _error, ctl) => {
-        if (!result || sessionRef.current !== session) return;
-        const code = normalizeBarcode(result.getText());
-        if (code.length < MIN_BARCODE_DIGITS) return;
-
-        sessionRef.current += 1;
-        ctl.stop();
-        controlsRef.current = null;
-        scanSuccessFeedback();
-        setStatus('idle');
-        onDetectedRef.current(code);
-      });
-
-      if (sessionRef.current !== session) {
-        // Stopped or unmounted while the camera was warming up.
-        controls.stop();
+      const stream = await navigator.mediaDevices.getUserMedia(CONSTRAINTS);
+      if (session !== sessionRef.current) {
+        // Stopped or unmounted while the camera was starting.
+        stream.getTracks().forEach((t) => t.stop());
         return;
       }
-      controlsRef.current = controls;
-      setStatus('scanning');
+      streamRef.current = stream;
+
+      const [track] = stream.getVideoTracks();
+      // iOS ends the track when the app goes to the background; offer a clean restart.
+      track?.addEventListener('ended', () => {
+        if (session !== sessionRef.current) return;
+        stopCamera();
+        setStatus('idle');
+      });
+      void preferContinuousFocus(track);
+
+      video.srcObject = stream;
+      await video.play();
+      await decoderRef.current;
+      if (session !== sessionRef.current) return;
+
+      confirmerRef.current.reset();
+      setStatus('live');
+      if (!pausedRef.current) void startLoop();
     } catch (err) {
-      if (sessionRef.current !== session) return;
+      if (session !== sessionRef.current) return;
+      stopCamera();
       const described = describeError(err);
       setStatus(described.status);
       setMessage(described.message);
       setShowManual(true);
     }
-  }, [stop]);
+  }, [startLoop, stopCamera]);
 
-  // Release the camera whenever the parent pauses us.
+  // Freeze while the parent is busy; pick up scanning again the moment it is done.
   useEffect(() => {
-    if (!paused) return;
-    stop();
-    setStatus((s) => (s === 'scanning' || s === 'starting' ? 'idle' : s));
-  }, [paused, stop]);
+    pausedRef.current = paused;
+    if (paused) {
+      stopLoop();
+      videoRef.current?.pause();
+      return;
+    }
+    if (!streamRef.current) return;
+    lockedRef.current = false;
+    setDetected(false);
+    confirmerRef.current.reset();
+    void videoRef.current?.play().catch(() => {});
+    void startLoop();
+  }, [paused, startLoop, stopLoop]);
 
-  // ...and on unmount.
-  useEffect(() => () => stop(), [stop]);
+  // Opening the Scan tab is the intent to scan, so start the camera right away. Deferred a tick so
+  // React's StrictMode double-mount in dev does not request the camera twice.
+  useEffect(() => {
+    const timer = window.setTimeout(() => void start(), 0);
+    return () => window.clearTimeout(timer);
+  }, [start]);
+
+  // Release the camera and the decoder on unmount.
+  useEffect(
+    () => () => {
+      stopCamera();
+      void decoderRef.current?.then((d) => d.dispose());
+      decoderRef.current = null;
+    },
+    [stopCamera],
+  );
 
   const submitManual = (e: FormEvent) => {
     e.preventDefault();
     const code = normalizeBarcode(manualCode);
     if (code.length < MIN_BARCODE_DIGITS) return;
-    stop();
-    setStatus('idle');
     setManualCode('');
     onDetectedRef.current(code);
   };
 
-  const live = status === 'scanning';
+  const live = status === 'live';
+  const frozen = live && (detected || paused);
   const failed = status === 'denied' || status === 'unavailable' || status === 'insecure' || status === 'error';
   const manualValid = normalizeBarcode(manualCode).length >= MIN_BARCODE_DIGITS;
 
+  const viewportClass = [
+    'scanner__viewport',
+    live && 'is-live',
+    frozen && 'is-frozen',
+    detected && 'is-detected',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <div className="scanner">
-      <div className={`scanner__viewport${live ? ' is-live' : ''}`}>
+      <div ref={viewportRef} className={viewportClass}>
         {/* playsInline + muted are required for iOS Safari to render a live camera stream inline. */}
         <video ref={videoRef} className="scanner__video" playsInline muted autoPlay />
-        {live && <div className="scanner__reticle" aria-hidden="true" />}
+        {live && <div className="scanner__reticle" style={RETICLE_STYLE} aria-hidden="true" />}
+        {live && statusText && (
+          <div className="scanner__status">
+            <Spinner label={statusText} />
+          </div>
+        )}
 
         {status === 'idle' && (
           <div className="scanner__overlay">
@@ -192,14 +334,16 @@ export function BarcodeScanner({ onDetected, paused = false }: Props) {
         )}
       </div>
 
+      {!live && statusText && <Spinner label={statusText} />}
+
       {live && (
         <div className="scanner__actions">
-          <p className="hint">Point the camera at an EAN or UPC barcode.</p>
+          <p className="hint">{detected ? 'Barcode captured.' : 'Point the camera at an EAN or UPC barcode.'}</p>
           <button
             type="button"
             className="btn btn--ghost"
             onClick={() => {
-              stop();
+              stopCamera();
               setStatus('idle');
             }}
           >
