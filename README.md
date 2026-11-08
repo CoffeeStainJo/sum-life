@@ -60,7 +60,7 @@ src/
     useFoodSearch.ts        Debounced, abortable OFF text search
     useBarcodeLookup.ts     Barcode → FoodCandidate
   components/
-    SummaryBar.tsx          Sticky kcal / protein / carbs / fat totals
+    SummaryBar.tsx          Day summary: big kcal total + protein/carbs/fat energy split
     MealSection.tsx         One card per meal; EntryRow.tsx has the serving stepper + delete
     CopyYesterdayButton.tsx Shown only when today is empty and yesterday is not
     AddFoodDrawer.tsx       Bottom sheet with Search and Scan tabs

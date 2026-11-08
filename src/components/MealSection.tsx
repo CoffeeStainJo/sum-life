@@ -38,14 +38,17 @@ export function MealSection({ meal, entries, onAdd, onChangeServings, onRemove }
             {fmtGrouped(totals.calories)} <small>kcal</small>
           </span>
         )}
-        <button
-          type="button"
-          className="icon-btn icon-btn--accent"
-          aria-label={`Add to ${label}`}
-          onClick={() => onAdd(meal)}
-        >
-          <Plus size={20} />
-        </button>
+        {/* Empty meals get a full-width "Add …" slot below instead. */}
+        {entries.length > 0 && (
+          <button
+            type="button"
+            className="icon-btn icon-btn--accent"
+            aria-label={`Add to ${label}`}
+            onClick={() => onAdd(meal)}
+          >
+            <Plus size={20} />
+          </button>
+        )}
       </header>
       {entries.length > 0 ? (
         <ul className="meal__list">
