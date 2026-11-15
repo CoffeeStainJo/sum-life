@@ -3,7 +3,7 @@ import type { AmountUnit, DailyLog, FoodItem, JournalEntry, MacroTotals, MealTyp
 import { MEAL_TYPES } from '../types';
 import { todayKey, yesterdayKey } from '../lib/dates';
 import { newId } from '../lib/id';
-import { clampServings, sumMacros } from '../lib/nutrition';
+import { clampMultiplier, sumMacros } from '../lib/nutrition';
 import { STORAGE_PREFIX, loadLog, pruneLogs, saveLog } from '../lib/storage';
 
 interface JournalState {
@@ -91,7 +91,7 @@ export function useDailyJournal(): DailyJournal {
       const entry: JournalEntry = {
         id: newId(),
         foodItem,
-        servings: clampServings(servings),
+        servings: clampMultiplier(servings),
         mealType,
         loggedAt: new Date().toISOString(),
         amountUnit,
@@ -104,7 +104,7 @@ export function useDailyJournal(): DailyJournal {
 
   const updateServings = useCallback(
     (entryId: string, servings: number) => {
-      const next = clampServings(servings);
+      const next = clampMultiplier(servings);
       mutate((base) => base.today.entries.map((e) => (e.id === entryId ? { ...e, servings: next } : e)));
     },
     [mutate],

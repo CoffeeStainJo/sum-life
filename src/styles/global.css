@@ -120,11 +120,16 @@ html {
 }
 
 /* Fixed body + internally scrolling <main> is the reliable way to kill rubber-band
-   bounce on the app shell in iOS Safari / standalone mode. */
+   bounce on the app shell in iOS Safari / standalone mode.
+   --vv-top / --vv-height mirror the visual viewport (see lib/viewport.ts), so the shell
+   shrinks to the space above the on-screen keyboard instead of sitting behind it. */
 body {
   margin: 0;
   position: fixed;
-  inset: 0;
+  top: var(--vv-top, 0px);
+  left: 0;
+  right: 0;
+  height: var(--vv-height, 100%);
   overflow: hidden;
   overscroll-behavior: none;
   background: var(--grain), var(--paper);
@@ -815,6 +820,24 @@ input[type='search']::-webkit-search-cancel-button {
     background-color 0.15s;
 }
 
+/* With the keyboard up there is no room to spare: drop the floating button and the space
+   reserved for it and for the home indicator. */
+:root[data-keyboard] .fab {
+  display: none;
+}
+
+:root[data-keyboard] .app__main {
+  padding-bottom: 24px;
+}
+
+:root[data-keyboard] .drawer {
+  padding-bottom: 0;
+}
+
+:root[data-keyboard] .confirm__footer {
+  padding-bottom: 14px;
+}
+
 .fab:active {
   transform: scale(0.95);
   background: var(--accent-strong);
@@ -885,7 +908,10 @@ input[type='search']::-webkit-search-cancel-button {
 ------------------------------------------------------------------ */
 .drawer-root {
   position: fixed;
-  inset: 0;
+  top: var(--vv-top, 0px);
+  left: 0;
+  right: 0;
+  height: var(--vv-height, 100%);
   z-index: 20;
   display: flex;
   align-items: flex-end;
@@ -903,7 +929,7 @@ input[type='search']::-webkit-search-cancel-button {
   position: relative;
   width: 100%;
   max-width: 600px;
-  max-height: calc(100dvh - var(--safe-top) - 24px);
+  max-height: calc(var(--vv-height, 100dvh) - var(--safe-top) - 24px);
   display: flex;
   flex-direction: column;
   background: var(--grain), var(--surface);
@@ -911,6 +937,19 @@ input[type='search']::-webkit-search-cancel-button {
   box-shadow: var(--shadow-float);
   padding-bottom: var(--safe-bottom);
   animation: slide-up 0.32s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+/* While a finger drags the sheet, it follows the touch 1:1. */
+.drawer.is-dragging {
+  transition: none;
+}
+
+.drawer.is-settling {
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+.drawer__backdrop.is-settling {
+  transition: opacity 0.22s ease-out;
 }
 
 .drawer__grip {
@@ -1572,7 +1611,7 @@ input[type='search']::-webkit-search-cancel-button {
   }
 
   .drawer {
-    max-height: calc(100dvh - 48px);
+    max-height: calc(var(--vv-height, 100dvh) - 48px);
     border-radius: var(--radius-lg);
     padding-bottom: 0;
   }

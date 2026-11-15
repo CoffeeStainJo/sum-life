@@ -4,7 +4,7 @@ import type { AmountUnit, FoodItem, MealType } from '../types';
 import { MEAL_TYPES } from '../types';
 import { newId } from '../lib/id';
 import { MEAL_LABELS } from '../lib/meals';
-import { AMOUNT_CONFIG, fmt, gramsFromServings, servingsFromGrams } from '../lib/nutrition';
+import { AMOUNT_CONFIG, clampServings, fmt, gramsFromServings, servingsFromGrams } from '../lib/nutrition';
 import type { Basis, FoodCandidate, MacroKey, Macros } from '../lib/openFoodFacts';
 import { Stepper } from './Stepper';
 
@@ -124,7 +124,7 @@ export function FoodConfirmForm({ candidate, defaultMeal, onSubmit }: Props) {
     setForm((f) => ({
       ...f,
       unit: next,
-      amount: next === 'grams' ? gramsFromServings(f.amount, servingGrams) : servingsFromGrams(f.amount, servingGrams),
+      amount: next === 'grams' ? gramsFromServings(f.amount, servingGrams) : clampServings(servingsFromGrams(f.amount, servingGrams)),
     }));
   };
 

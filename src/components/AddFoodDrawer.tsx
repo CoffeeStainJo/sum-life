@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { AmountUnit, FoodItem, MealType } from '../types';
 import { useBarcodeLookup, type BarcodeLookup } from '../hooks/useBarcodeLookup';
 import { useFoodSearch } from '../hooks/useFoodSearch';
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 import { primeAudio } from '../lib/feedback';
 import { emptyCandidate, type FoodCandidate } from '../lib/openFoodFacts';
 // Light on its own: the zxing decoder lives in a Web Worker that loads only when the camera starts.
@@ -34,6 +35,7 @@ function DrawerContent({ initialMeal, onClose, onAdd }: Omit<Props, 'open'>) {
   const search = useFoodSearch();
   const lookup = useBarcodeLookup();
   const { status: lookupStatus, candidate: lookupCandidate, reset: resetLookup } = lookup;
+  const { sheetRef, backdropRef } = useSwipeToDismiss(onClose);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -67,8 +69,8 @@ function DrawerContent({ initialMeal, onClose, onAdd }: Omit<Props, 'open'>) {
 
   return (
     <div className="drawer-root">
-      <div className="drawer__backdrop" onClick={onClose} aria-hidden="true" />
-      <div className="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+      <div ref={backdropRef} className="drawer__backdrop" onClick={onClose} aria-hidden="true" />
+      <div ref={sheetRef} className="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
         <div className="drawer__grip" aria-hidden="true" />
         <header className="drawer__header">
           {candidate ? (

@@ -75,6 +75,13 @@ describe('logging by weight', () => {
     expect(gramsFromServings(2, 100)).toBe(200);
   });
 
+  it('allows weights well below a quarter serving', () => {
+    expect(servingsFromGrams(7, 100)).toBe(0.07);
+    expect(gramsFromServings(servingsForAmount('grams', 7, 100), 100)).toBe(7);
+    expect(gramsFromServings(servingsForAmount('grams', 1, 100), 100)).toBe(1);
+    expect(servingsForAmount('servings', 0.1, 100)).toBe(0.25); // servings keep their own minimum
+  });
+
   it('knows which foods can be weighed', () => {
     expect(canLogByWeight(rice)).toBe(true);
     expect(canLogByWeight({ ...bar, servingGrams: 0 })).toBe(false);

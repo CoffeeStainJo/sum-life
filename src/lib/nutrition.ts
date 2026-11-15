@@ -33,12 +33,24 @@ export function clampAmount(unit: AmountUnit, value: number): number {
 export const clampServings = (value: number): number => clampAmount('servings', value);
 export const clampGrams = (value: number): number => clampAmount('grams', value);
 
+/**
+ * Bounds for the stored servings multiplier. Looser than the servings stepper's own range,
+ * because a few grams of a "100 g" serving is a small fraction of one serving.
+ */
+const MIN_MULTIPLIER = 1 / PRECISION;
+const MAX_MULTIPLIER = AMOUNT_CONFIG.grams.max;
+
+export function clampMultiplier(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(MAX_MULTIPLIER, Math.max(MIN_MULTIPLIER, roundAmount(value)));
+}
+
 export function canLogByWeight(food: FoodItem): food is FoodItem & { servingGrams: number } {
   return typeof food.servingGrams === 'number' && Number.isFinite(food.servingGrams) && food.servingGrams > 0;
 }
 
 export function servingsFromGrams(grams: number, servingGrams: number): number {
-  return clampServings(grams / servingGrams);
+  return clampMultiplier(clampGrams(grams) / servingGrams);
 }
 
 export function gramsFromServings(servings: number, servingGrams: number): number {
